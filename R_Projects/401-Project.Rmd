@@ -1,0 +1,232 @@
+---
+title: "401-Project"
+author: "Xiyi Lin"
+date: "2023-11-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+SubscriptionId: uniquely identifies a subscriber
+t: the month number in the customer’s life
+churn: indicator if customer churned this month
+(engagement)
+• regularity: number of reading days this month
+• intensity: number of page views (PVs) per reading day this month
+• Payment variables trial, currprice: indicates if the reader is paying a trial rate and the price paid this period.
+(distribution and the user experience)
+• Content variables sports1–opinion1: number of PVs in each section this month
+(promotion and acquisition)
+• Device variables mobile, tablet, desktop: number of sessions on different devices
+this month
+• Ignore Loc1–Loc4 and SrcGoogle–SrcLegacy.
+```{r}
+library(dplyr)
+setwd("~/Desktop/Northwestern/401-PrescriptiveAnalytics/Project")
+np = read.table("np.csv", header=T, na.strings=".") 
+# drop unnecessary columns
+np = np[, !(names(np) %in% c("loc1","Loc2","Loc3","Loc4","SrcGoogle","SrcDirect","SrcElm","SrcSocial","SrcBingYahooAol","SrcNewsletter","SrcLegacy","SrcGoogleNews","SrcGoogleAd"))]
+```
+nextchurn: indicating churn next month by customer
+```{r}
+np <- np %>%
+  arrange(SubscriptionId, t) %>%
+  group_by(SubscriptionId) %>%
+  mutate(
+    nextchurn = lead(churn),
+    nextprice = lead(currprice),
+    t = t
+  )
+np$churn <- as.factor(np$churn)
+summary(np)
+```        
+last month of stay per subscriber
+```{r}
+last_month <- np %>%
+  arrange(SubscriptionId, desc(t)) %>%
+  group_by(SubscriptionId) %>%
+  summarise(last_month_of_stay = first(t))
+```
+plot
+```{r}
+plot(np$nextchurn, np$trial) # orthogonal design
+plot(np$nextchurn, np$regularity) # no dif
+plot(np$nextchurn, np$intensity) # as intensity goes up, less likely to churn
+```
+### Model 1: nextchurn ~ t+trial+nextprice+regularity+intensity
+```{r}
+library(car)
+model1 <- glm(nextchurn ~ t + trial + nextprice + regularity + intensity, data = np, family = "binomial")
+summary(model1)
+vif(model1)
+cor(np$t, np$trial)
+```
+Intensity is not significant in Model 1, when regularity is included. 
+Given that most trial offers are for one month, and many customers did not have trial offers, the trial effect can be interpreted based on the coefficient associated with the trial variable. The coefficient for the trial variable is positive (0.360129) and statistically significant, so it suggests that having a trial offer is associated with an increased likelihood of nextchurn by 0.360129. This means some users churn after using the product in a trial period. This is often because users are unable to quickly understand how a product actually adds value to their business. After checking for vif and cor between t and trail variable, there is no potential collinearity issues. 
+
+A negative coefficient for regularity suggests that an increase in regularity is associated with a decrease in the log-odds of nextchurn, which means the more often the customer uses the product, the more likely they will keep subscription. The odds ratio, exp(-0.02651)=0.9738383, less than 1 implies that as the corresponding predictor variable increases by one unit, the odds of nextchurn decrease by a factor of the odds ratio.
+
+### Model 2: nextchurn ~ t+trial+nextprice+regularity
+```{r}
+model2 <- glm(nextchurn ~ t + trial + nextprice + regularity, data = np, family = "binomial")
+summary(model2)
+vif(model2)
+```
+All variables are significant. Still, the coefficient for the trial variable is positive and statistically significant, so it suggests that having a trial offer is associated with an increased likelihood of nextchurn by 0.346632. 
+A negative coefficient for regularity suggests that an increase in regularity is associated with a decrease in the log-odds of nextchurn. The odds ratio, exp(-0.031944)=0.9685608, less than 1 implies that as the corresponding predictor variable increases by one unit, the odds of nextchurn decrease by a factor of the odds ratio.
+
+### Model 3: nextchurn ~ t+trial+nextprice+intensity
+```{r}
+model3 <- glm(nextchurn ~ t + trial + nextprice + intensity, data = np, family = "binomial")
+summary(model3)
+vif(model3)
+```
+All variables are significant. Still, the coefficient for the trial variable is positive and statistically significant, so it suggests that having a trial offer is associated with an increased likelihood of nextchurn by 0.325119. 
+A negative coefficient for intensity suggests that an increase in intensity is associated with a decrease in the log-odds of nextchurn. The odds ratio, exp(-0.018857)=0.9813197, less than 1 implies that as the corresponding predictor variable increases by one unit, the odds of nextchurn decrease by a factor of the odds ratio.
+
+# (a) What is the trial effect telling you, given that (1) most trial offers are 1 month, (2) many customers did not have trial offers, and (3) you already have a dummy for month 1 in the model with the t variable?
+In three models, positive coefficient suggests that with trial offer the log-odds of nextchurn will increase, holding other variables constant. 
+The reason: 
+* 		Limited Engagement Period -> Consider extending the trial period to provide users with more time to fully experience and appreciate the value of your service.
+* 		Unrealistic Expectations -> Clearly communicate the features, benefits, and limitations of your service during the trial period to align user expectations.
+* 		Insufficient Onboarding -> Enhance onboarding processes, provide tutorials, and offer customer support to ensure users understand how to maximize the value of the service.
+* 		Lack of Retention Strategies -> Implement retention strategies such as targeted communication, special offers, or exclusive features for trial users who convert to paying customers.
+* 		Competitive Landscape -> Focus on differentiating your service, highlight unique features, and demonstrate superior value to competitors.
+* 		Cancellation Ease -> While maintaining user-friendly policies, consider implementing features that encourage users to continue, such as discounts for subscription renewals.
+* 		Customer Feedback Analysis -> Use customer feedback to make product/service enhancements and address user concerns.
+* 		Data Segmentation -> Tailor marketing strategies, promotions, or features based on user segments to improve conversion rates.
+
+# (b) What do you conclude about the effects of intensity versus regularity? Which one should an organization develop strategies to encourage?
+```{r}
+coef <- data.frame(Model = c("Model 1", "Model 2", "Model 3"),                     regularity=c(model1$coefficients[[5]],model2$coefficients[[5]],NA),
+intensity = c(model1$coefficients[[6]],NA,model3$coefficients[[5]]))
+print(coef)
+```
+In three models, negative coefficient suggests that higher values of regularity or intensity are associated with a lower log-odds of nextchurn, holding other variables constant. Which means either increasing the number of reading days of customers this month or the number of page views (PVs) per reading day this month will keep customers maintaining the service. 
+
+The magnitude of intensity/regularity may show the effect of each variable in churn rate. In general, regularity has a greater impact on keeping customers than intensity (in Model 1 it is significant when both variables present; also with larger magnitude).
+
+#3 Do your conclusions change if you include regularity in the model?
+### Model 4: nextchurn~t+trial+nextprice+sports1+news1+crime1+life1+obits1+business1+opinion1
+```{r}
+model4 <- glm(nextchurn~t+trial+nextprice+sports1+news1+crime1+life1+obits1+business1+opinion1, data = np, family = "binomial")
+summary(model4)
+vif(model4)
+# aligns with our conclusion: more number of PVs in the section, less likely to churn
+plot(np$nextchurn,np$sports1)
+plot(np$nextchurn,np$news1)
+```
+The most of content does not play a significant role in explaining nextchurn, except the sports and news (which could have the largest portion of subscribers' interests). Negative coefficient of sports (-0.006065) and news (-0.012748) suggest that higher values of number of PVs in these two sections are associated with a lower log-odds of nextchurn.
+We can try to personalize the content based on each subscriber's intendedness so that the content, statistics, and current customer list are all targeted to each type of customer. 
+
+### Model 5: nextchurn~t+trial+nextprice+sports1+news1+crime1+life1+obits1+business1+opinion1+regularity
+```{r}
+model5 <- glm(nextchurn~t+trial+nextprice+sports1+news1+crime1+life1+obits1+business1+opinion1+regularity, data = np, family = "binomial")
+summary(model5)
+vif(model5)
+```
+Yes, it significantly changes. The former two important components, sports and news, are now non-significant which may due to the correlation with regularity. Users who engage regularly with a service or platform may also be more likely to consume various types of content available on that platform. Regular engagement often involves interacting with different features, articles, videos, or other content offerings. The content could be seen as a type of engagement where users regularly check for the product. 
+
+### Model 6: nextchurn~t+trial+nextprice+crime1+life1+obits1+business1+opinion1+sports1*regularity+news1*regularity
+Introduce two interaction terms: sports1*regularity, news1*regularity
+```{r}
+model6 <- glm(nextchurn~t+trial+nextprice+crime1+life1+obits1+business1+opinion1+sports1*regularity+news1*regularity, data = np, family = "binomial")
+summary(model6)
+vif(model6)
+```
+Still, only regularity is significant, not sports nor news. We see there are very high VIF for sports1, news1, sports1:regularity, and regularity:news1, which means they do exist highly correlation with regularity. That's why the conclusion changes a bit.
+
+#4 What can you conclude about the effect of device on churn?
+### Model 7: nextchurn~t+trial+nextprice+mobile+tablet+desktop
+```{r}
+model7 <- glm(nextchurn~t+trial+nextprice+mobile+tablet+desktop, data = np, family = "binomial")
+summary(model7)
+vif(model7)
+plot(np$nextchurn,np$mobile)
+plot(np$nextchurn,np$tablet)
+plot(np$nextchurn,np$desktop)
+```
+We see that the number of sessions on desktop only this month is significant in affecting churn rate. Thus there are different effects or relationships between device types, though the coefficient (-0.009112) is small which means the impact of device type on churn may not be substantial. The negative coefficient suggests that higher values of the number of sessions on desktop devices are associated with a lower log-odds of nextchurn, holding other variables constant.
+Reasons: 
+varying usage patterns (expectations, use cases, or preferences)
+desktop service more accessible, user-friendly, or enjoyable (positive perception)
+Product Fit: desktop-first approach or relies heavily on features that are better suited for desktop usage
+specific features or functionalities
+Competitive Landscape
+Industry Norms and Standards
+
+#5 Do your conclusions change if you fit a model with payment, content, and device variables all in at the same time? What if you use lasso with cross validation rather than statistical significance?
+### Model 8: nextchurn~t+trial+nextprice+sports1+news1+crime1+life1+obits1+business1+opinion1+mobile+tablet+desktop
+```{r}
+model8 <- glm(nextchurn~t+trial+nextprice+sports1+news1+crime1+life1+obits1+business1
+     +opinion1+mobile+tablet+desktop, data = np, family = "binomial")
+summary(model8)
+vif(model8)
+```
+Only desktop variable is significant, except for t, trial, nextprice. 
+
+### Model 9: nextchurn~t+trial+nextprice+sports1+news1+crime1+life1+obits1+business1+opinion1+mobile+tablet+desktop+regularity+intensity
+```{r}
+model9 <- glm(nextchurn~t+trial+nextprice+sports1+news1+crime1+life1+obits1+business1
+     +opinion1+mobile+tablet+desktop+regularity+intensity, data = np, family = "binomial")
+summary(model9)
+vif(model9)
+cor(np$regularity,np$desktop)
+```
+Only regularity variable is significant, except for t, trial, nextprice.
+
+(Without regularity)
+Yes, since only t, trial, nextprice, and desktop variables are significant when including all of them at the same time. Now the sports and news variable are not significant, even if we do not include regularity in our model. 
+(With regularity)
+Yes, only t, trial, nextprice, and regularity are significant. Now the desktop variables also becomes non-significant anymore, which may due to the existence of correlation (0.5977743) between regularity and desktop device (as we talked before). For example, regularity may correlated with the device users choose to use and the more comfortable of their use, the more likely they will use it regularly. 
+
+```{r}
+library(glmnet)
+set.seed(12345)
+np_no_na = na.omit(np)
+train <- runif(nrow(np_no_na)) < 0.5
+table(train)
+
+
+# Create model matrix
+#x <- model.matrix(nextchurn_numeric ~ t + trial + nextprice + sports1 + news1 + crime1 + life1 + obits1 + business1 + opinion1 + mobile + tablet + desktop, data = np)
+y <- np_no_na$nextchurn
+x <- model.matrix(nextchurn ~ . - SubscriptionId, data = np_no_na)
+
+# Fit Lasso regression
+fit.lasso <- glmnet(x, np_no_na$nextchurn, alpha = 1, subset = train)
+# Fit Lasso regression with cross-validation
+fit.cv <- cv.glmnet(x, np_no_na$nextchurn, alpha = 1, subset = train)
+plot(fit.cv)
+
+cv_lasso <- cv.glmnet(x, y, family = "binomial", alpha = 1)
+plot(cv_lasso)
+
+best_lambda <- cv_lasso$lambda.min
+````
+
+#6 6. Considering all of your analyses, give a final recommendation for which factors retain customers, which factors drive them away, and which factors have no (substantial) effect on churn? In other words, give a summary of your final conclusions.
+
+Affective Variable: t, trial, nextprice, regularity 
+Non-affective Variable: all others
+```{r}
+set.seed(123) 
+X <- model.matrix(~ t + trial + nextprice + sports1 + news1 + crime1 + 
+                    life1 + obits1 + business1 + opinion1 + mobile + tablet + desktop - 1, 
+                  data = np_no_na) 
+cv_lasso <- cv.glmnet(X, y, family = "binomial", alpha = 1)
+best_lambda <- cv_lasso$lambda.min
+
+# Fitting using the best lambda above
+lasso_model <- glmnet(X, y, family = "binomial", alpha = 1, lambda = best_lambda)
+
+lasso_coefs <- coef(lasso_model, s = "lambda.min")
+lasso_coefs
+
+```
+
+
+
+
