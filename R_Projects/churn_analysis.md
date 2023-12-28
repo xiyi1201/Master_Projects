@@ -2,10 +2,11 @@
 
 In this project, we dive into the realm of churn analysis, leveraging the "np.csv" dataset to unravel insights into subscriber behavior in the digital media landscape. The dataset is space-delimited with a header line, and missing values are denoted by the symbol "."—important information for R users, where the na.strings="." setting is recommended.
 
-Project Objective:
+**Project Objective:**
+
 The primary aim of this exploratory analysis is to discern factors associated with churn and retention among digital-only subscribers. By examining variables related to reader engagement, content consumption, payment behavior, and device preferences, we seek actionable insights. These insights will play a pivotal role in resource allocation, guiding improvements in various aspects of the media product. Whether optimizing reader engagement, refining content strategy, enhancing user experience, or fine-tuning acquisition efforts, this project endeavors to provide valuable intelligence for strategic decision-making in the dynamic digital media landscape.
 
-Key Variables:
+**Key Variables:**
 
 Churn Indicator (churn):
 Binary indicator representing whether a subscriber churned in the current month.
